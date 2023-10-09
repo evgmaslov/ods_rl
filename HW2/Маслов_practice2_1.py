@@ -3,8 +3,6 @@ from torch import nn
 import numpy as np
 import gym
 import matplotlib.pyplot as plt
-"""from pyvirtualdisplay import Display
-from IPython import display as ipythondisplay"""
 from gym.wrappers.record_video import RecordVideo
 
 
@@ -82,19 +80,14 @@ def wrap_env(env):
     env = RecordVideo(env, './video',  episode_trigger = lambda episode_number: True)
     return env
 
-print("Started!")
-"""display = Display(visible=0, size=(1400, 900))
-display.start()
-print("Display started!")"""
 env = gym.make('LunarLander-v2', render_mode="rgb_array")
 state_dim = 8
 action_n = 4
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-print("Agent initialization")
 agent = CEM(state_dim, action_n).to(device)
 episode_n = 50
-trajectory_n = 20
+trajectory_n = 200
 trajectory_len = 500
 q_param = 0.8
 
@@ -117,7 +110,7 @@ ax.set_xlabel("Iteration")
 ax.set_ylabel("Reward")
 ax.plot(range(len(rewards)), rewards)
 ax.legend()
-plt.savefig("Task1_1.png")
+plt.savefig("Task1_2.png")
 
 env = wrap_env(env)
-get_trajectory(env, agent, trajectory_len, visualize=True)
+get_trajectory(env, agent, trajectory_len, visualize=False)
