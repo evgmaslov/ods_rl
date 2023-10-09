@@ -1,3 +1,4 @@
+import wandb
 import torch
 from torch import nn 
 import numpy as np
@@ -25,10 +26,13 @@ class CEM(nn.Module):
     def forward(self, _input):
         return self.network(_input.to(device)) 
     
-    def get_action(self, state):
+    def get_action(self, state, eps):
         state = torch.FloatTensor(state).to(device)
         logits = self.forward(state)
-        action_prob = self.softmax(logits).detach().cpu().numpy()
+        mean = 0
+        std = eps
+        noise = torch.tensor(np.random.normal(mean, std, logits.size()), dtype=torch.float).to(device)
+        action_prob = self.softmax(logits+noise).detach().cpu().numpy()
         action = np.random.choice(self.action_n, p=action_prob)
         return action
     
@@ -47,14 +51,14 @@ class CEM(nn.Module):
         self.optimizer.zero_grad()
         
         
-def get_trajectory(env, agent, trajectory_len, visualize=False):
+def get_trajectory(env, agent, trajectory_len, eps, visualize=False):
     trajectory = {'states':[], 'actions': [], 'total_reward': 0}
     
     state = env.reset()[0]
     trajectory['states'].append(state)
     for i in range(trajectory_len):
         
-        action = agent.get_action(state)
+        action = agent.get_action(state, eps)
         trajectory['actions'].append(action)
         
         state, reward, done, some1, some2 = env.step(action)
@@ -87,22 +91,34 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 agent = CEM(state_dim, action_n).to(device)
 episode_n = 50
-trajectory_n = 200
+trajectory_n = 100
 trajectory_len = 500
 q_param = 0.8
 
+wandb.login()
+config = {
+    "trajectory_n":trajectory_n,
+    "epochs":episode_n,
+    "trajectory_len":trajectory_len,
+    "q_param":q_param
+}
+run = wandb.init(project="ods_rl-lunar_lander", config=config)
+
 rewards = []
+eps = 1
 for episode in range(episode_n):
-    trajectories = [get_trajectory(env, agent, trajectory_len) for _ in range(trajectory_n)]
+    trajectories = [get_trajectory(env, agent, trajectory_len, eps) for _ in range(trajectory_n)]
     
     mean_total_reward = np.mean([trajectory['total_reward'] for trajectory in trajectories])
     print(f'episode: {episode}, mean_total_reward = {mean_total_reward}')
     rewards.append(mean_total_reward)
+    wandb.log({"mean_total_reward":mean_total_reward})
     
     elite_trajectories = get_elite_trajectories(trajectories, q_param)
     
     if len(elite_trajectories) > 0:
         agent.update_policy(elite_trajectories)
+        eps /= (episode+1)
     
 fig, ax = plt.subplots()
 ax.set_title("Train")
@@ -110,7 +126,7 @@ ax.set_xlabel("Iteration")
 ax.set_ylabel("Reward")
 ax.plot(range(len(rewards)), rewards)
 ax.legend()
-plt.savefig("Task1_2.png")
+plt.savefig("Task1_3.png")
 
 env = wrap_env(env)
 get_trajectory(env, agent, trajectory_len, visualize=False)
