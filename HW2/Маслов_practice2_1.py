@@ -14,9 +14,9 @@ class CEM(nn.Module):
         self.action_n = action_n
         
         self.network = nn.Sequential(
-            nn.Linear(self.state_dim, 128), 
+            nn.Linear(self.state_dim, 64), 
             nn.ReLU(), 
-            nn.Linear(128, self.action_n)
+            nn.Linear(64, self.action_n)
         )
         
         self.softmax = nn.Softmax()
@@ -90,8 +90,8 @@ action_n = 4
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 agent = CEM(state_dim, action_n).to(device)
-episode_n = 50
-trajectory_n = 100
+episode_n = 100
+trajectory_n = 200
 trajectory_len = 500
 q_param = 0.8
 
@@ -102,7 +102,8 @@ config = {
     "trajectory_len":trajectory_len,
     "q_param":q_param
 }
-run = wandb.init(project="ods_rl-lunar_lander", config=config)
+run = wandb.init(project="ods_rl-lunar_lander", config=config, name="Add trajectories, reduce model.")
+wandb.watch(agent, log_freq=100)
 
 rewards = []
 eps = 1
@@ -118,7 +119,7 @@ for episode in range(episode_n):
     
     if len(elite_trajectories) > 0:
         agent.update_policy(elite_trajectories)
-        eps /= (episode+1)
+        eps = 1/(episode+1)
     
 fig, ax = plt.subplots()
 ax.set_title("Train")
@@ -129,4 +130,7 @@ ax.legend()
 plt.savefig("Task1_3.png")
 
 env = wrap_env(env)
-get_trajectory(env, agent, trajectory_len, visualize=False)
+get_trajectory(env, agent, trajectory_len, eps, visualize=False)
+video_path = "/mnt/c/Все файлы/Курсы/ODS RL/video/rl-video-episode-0.mp4"
+wandb.log({"video": wandb.Video(video_path, fps=4, format="gif")})
+wandb.finish()
