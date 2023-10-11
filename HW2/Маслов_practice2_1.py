@@ -20,7 +20,8 @@ class CEM(nn.Module):
         )
         
         self.softmax = nn.Softmax()
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.01)
+        self.optimizer = None
+        self.scheduler = None
         self.loss = nn.CrossEntropyLoss()
         
     def forward(self, _input):
@@ -48,6 +49,8 @@ class CEM(nn.Module):
         loss = self.loss(self.forward(elite_states), elite_actions)
         loss.backward()
         self.optimizer.step()
+        if scheduler is not None:
+            self.scheduler.step()
         self.optimizer.zero_grad()
         
         
@@ -89,8 +92,12 @@ state_dim = 8
 action_n = 4
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-agent = CEM(state_dim, action_n).to(device)
 episode_n = 100
+agent = CEM(state_dim, action_n).to(device)
+optim = torch.optim.AdamW(agent.parameters(), lr=1e-2)
+scheduler = None
+agent.optimizer = optim
+agent.scheduler = scheduler
 trajectory_n = 200
 trajectory_len = 500
 q_param = 0.8
@@ -100,9 +107,11 @@ config = {
     "trajectory_n":trajectory_n,
     "epochs":episode_n,
     "trajectory_len":trajectory_len,
-    "q_param":q_param
+    "q_param":q_param,
+    "optim":optim,
+    "scheduler":scheduler
 }
-run = wandb.init(project="ods_rl-lunar_lander", config=config, name="Add trajectories, reduce model.")
+run = wandb.init(project="ods_rl-lunar_lander", config=config, name="Run 10")
 wandb.watch(agent, log_freq=100)
 
 rewards = []
@@ -127,7 +136,7 @@ ax.set_xlabel("Iteration")
 ax.set_ylabel("Reward")
 ax.plot(range(len(rewards)), rewards)
 ax.legend()
-plt.savefig("Task1_3.png")
+plt.savefig("Task1_5.png")
 
 env = wrap_env(env)
 get_trajectory(env, agent, trajectory_len, eps, visualize=False)
