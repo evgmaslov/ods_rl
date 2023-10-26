@@ -17,12 +17,6 @@ class CEM(nn.Module):
         self.network = nn.Sequential(
             nn.Linear(self.state_dim, hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(), 
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(), 
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(), 
             nn.Linear(hidden_dim, self.action_n),
         )
         
@@ -34,7 +28,7 @@ class CEM(nn.Module):
         
     def forward(self, _input):
         out = self.network(_input.to(device))
-        out = self.activation(out)*self.mul
+        #out = self.activation(out)*self.mul
         return out
     
     def get_action(self, state, eps):
@@ -43,7 +37,7 @@ class CEM(nn.Module):
         mean = 0
         std = eps
         noise = torch.tensor(np.random.normal(mean, std, out.size()), dtype=torch.float).to(device)
-        action = (out+noise).detach().cpu().numpy()
+        action = self.activation((out+noise)).detach().cpu().numpy()
         return action
     
     def update_policy(self, elite_trajectories):
@@ -55,7 +49,7 @@ class CEM(nn.Module):
         elite_states = torch.FloatTensor(elite_states).to(device)
         elite_actions = torch.FloatTensor(elite_actions).to(device)
         
-        loss = self.loss(self.forward(elite_states), elite_actions)
+        loss = self.loss(self.activation(self.forward(elite_states)), elite_actions)
         loss.backward()
         self.optimizer.step()
         if scheduler is not None:
@@ -74,6 +68,8 @@ def get_trajectory(env, agent, trajectory_len, eps, visualize=False):
         trajectory['actions'].append(action)
         
         state, reward, done, some1, some2 = env.step(action)
+        """if reward < 100:
+            reward = -reward"""
         trajectory['total_reward'] += reward
         
         if done:
@@ -99,16 +95,16 @@ def wrap_env(env):
 env = gym.make('MountainCarContinuous-v0', render_mode="rgb_array")
 state_dim = 2
 action_n = 1
-hidden_dim = 256
+hidden_dim = 8
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-episode_n = 100
+episode_n = 10
 agent = CEM(state_dim, action_n, hidden_dim).to(device)
-optim = torch.optim.SGD(agent.parameters(), lr=3e-2)
+optim = torch.optim.SGD(agent.parameters(), lr=10)
 scheduler = None
 agent.optimizer = optim
 agent.scheduler = scheduler
-trajectory_n = 20
+trajectory_n = 1000
 trajectory_len = 1000
 q_param = 0.3
 
@@ -121,13 +117,13 @@ config = {
     "optim":optim,
     "scheduler":scheduler,
     "hidden_dim":hidden_dim,
-    "n_hidden":4
+    "n_hidden":1
 }
-run = wandb.init(project="ods_rl-MountainCarContinuous", config=config, name="Run 4")
+run = wandb.init(project="ods_rl-MountainCarContinuous", config=config, name="Run 13")
 wandb.watch(agent, log_freq=100)
 
 rewards = []
-eps = 0.1
+eps = 1
 for episode in range(episode_n):
     trajectories = [get_trajectory(env, agent, trajectory_len, eps) for _ in range(trajectory_n)]
     
