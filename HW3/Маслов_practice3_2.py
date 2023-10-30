@@ -41,12 +41,16 @@ def policy_evaluation_step(v_values, policy, gamma):
             new_v_values[state] += policy[state][action] * q_values[state][action]
     return new_v_values
 
-def policy_evaluation(policy, gamma, eval_iter_n):
-    v_values = init_v_values()
+#This function is modified with using values from the last step
+def policy_evaluation(policy, gamma, eval_iter_n, last_v_values, use_last_values=True):
+    if use_last_values:
+        v_values = last_v_values
+    else:
+        v_values = init_v_values()
     for _ in range(eval_iter_n):
         v_values = policy_evaluation_step(v_values, policy, gamma)
     q_values = get_q_values(v_values, gamma)
-    return q_values
+    return q_values, v_values
 	
 def policy_improvement(q_values):
 	policy = {}
@@ -62,31 +66,40 @@ def policy_improvement(q_values):
 		policy[state][argmax_action] = 1
 	return policy
 
-#-----Gamma validation-----
+#-----Trying to use last step values-----
 iter_n = 20
 eval_iter_n = 20
-gamma_range = [0.999, 0.99999, 0.0001]
+gamma = 0.99979
 env_entering_n = 1000
 action_n = 1000
 
 wandb.login()
 config = {
-    "task":"Gamma validation",
+    "task":"Comparison of different values using strategies",
     "description":"Try different gamma values with fixed number of iterations.",
     "iter_n":iter_n,
     "eval_iter_n":eval_iter_n,
-    "gamma_range":gamma_range,
+    "gamma":gamma,
     "env_entering_n":1000,
     "action_n":1000
 }
-run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Run 3")
+run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Run 5")
 
-def policy_training(iter_n, eval_iter_n, gamma):
+#This function is modified with using values from the last step
+def policy_training(iter_n, eval_iter_n, gamma, use_last_values):
     policy = init_policy()
+    v_values = init_v_values()
+    rewards = []
     for _ in range(iter_n):
-        q_values = policy_evaluation(policy, gamma, eval_iter_n)
+        q_values, v_values = policy_evaluation(policy, gamma, eval_iter_n, v_values, use_last_values=use_last_values)
         policy = policy_improvement(q_values)
-    return policy
+        mean_total_reward = policy_validation(policy, env_entering_n, action_n)
+        wandb_title = "Default strategy reward"
+        if use_last_values:
+             wandb_title = "Using last values strategy reward"
+        wandb.log({wandb_title:mean_total_reward})
+        rewards.append(mean_total_reward)
+    return policy, rewards
 
 def policy_validation(policy, env_entering_n, action_n):
     total_rewards = []
@@ -103,20 +116,8 @@ def policy_validation(policy, env_entering_n, action_n):
         total_rewards.append(total_reward)
     return np.mean(total_rewards)
 
-wandb.define_metric("gamma")
-wandb.define_metric("Mean total reward", step_metric="gamma")
+policy, default_rewards = policy_training(iter_n, eval_iter_n, gamma, use_last_values=False)
+policy, last_values_rewards = policy_training(iter_n, eval_iter_n, gamma, use_last_values=True)
 
-max_reward = 0
-max_gamma = 0
-for gamma in np.arange(*gamma_range):
-    policy = policy_training(iter_n, eval_iter_n, gamma)
-    mean_total_reward = policy_validation(policy, env_entering_n, action_n)
-    if mean_total_reward > max_reward:
-         max_gamma = gamma
-         max_reward = mean_total_reward
-    log_dict = {
-        "gamma": gamma,
-        "Mean total reward": mean_total_reward,
-    }
-    wandb.log(log_dict)
-print("Max gamma: {0}".format(max_gamma))
+print("Max default strategy reward: {0}".format(max(default_rewards)))
+print("Max last values strategy reward: {0}".format(max(last_values_rewards)))
