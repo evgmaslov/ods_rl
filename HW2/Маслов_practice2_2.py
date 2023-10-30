@@ -21,14 +21,12 @@ class CEM(nn.Module):
         )
         
         self.activation = nn.Tanh()
-        self.mul = 1
         self.optimizer = None
         self.scheduler = None
         self.loss = nn.MSELoss()
         
     def forward(self, _input):
         out = self.network(_input.to(device))
-        #out = self.activation(out)*self.mul
         return out
     
     def get_action(self, state, eps):
@@ -37,7 +35,8 @@ class CEM(nn.Module):
         mean = 0
         std = eps
         noise = torch.tensor(np.random.normal(mean, std, out.size()), dtype=torch.float).to(device)
-        action = self.activation((out+noise)).detach().cpu().numpy()
+        #action = np.array([-1.0]) if self.activation(out).item() < 0 else np.array([1.0])
+        action = (self.activation(out)+noise).detach().cpu().numpy()
         return action
     
     def update_policy(self, elite_trajectories):
@@ -46,10 +45,10 @@ class CEM(nn.Module):
         for trajectory in elite_trajectories:
             elite_states.extend(trajectory['states'])
             elite_actions.extend(trajectory['actions'])
-        elite_states = torch.FloatTensor(elite_states).to(device)
-        elite_actions = torch.FloatTensor(elite_actions).to(device)
+        elite_states = torch.FloatTensor(np.array(elite_states)).to(device)
+        elite_actions = torch.FloatTensor(np.array(elite_actions)).to(device)
         
-        loss = self.loss(self.activation(self.forward(elite_states)), elite_actions)
+        loss = self.loss(self.forward(elite_states), elite_actions)
         loss.backward()
         self.optimizer.step()
         if scheduler is not None:
@@ -58,7 +57,7 @@ class CEM(nn.Module):
         
         
 def get_trajectory(env, agent, trajectory_len, eps, visualize=False):
-    trajectory = {'states':[], 'actions': [], 'total_reward': 0}
+    trajectory = {'states':[], 'actions': [], 'total_reward': 0, "done": False}
     
     state = env.reset()[0]
     trajectory['states'].append(state)
@@ -68,9 +67,8 @@ def get_trajectory(env, agent, trajectory_len, eps, visualize=False):
         trajectory['actions'].append(action)
         
         state, reward, done, some1, some2 = env.step(action)
-        """if reward < 100:
-            reward = -reward"""
         trajectory['total_reward'] += reward
+        trajectory['done'] = done
         
         if done:
             break
@@ -86,7 +84,7 @@ def get_trajectory(env, agent, trajectory_len, eps, visualize=False):
 def get_elite_trajectories(trajectories, q_param):
     total_rewards = [trajectory['total_reward'] for trajectory in trajectories]
     quantile = np.quantile(total_rewards, q=q_param) 
-    return [trajectory for trajectory in trajectories if trajectory['total_reward'] > quantile]
+    return [trajectory for trajectory in trajectories if (trajectory['total_reward'] > quantile)]
 
 def wrap_env(env):
     env = RecordVideo(env, './video',  episode_trigger = lambda episode_number: True)
@@ -95,21 +93,24 @@ def wrap_env(env):
 env = gym.make('MountainCarContinuous-v0', render_mode="rgb_array")
 state_dim = 2
 action_n = 1
-hidden_dim = 8
+hidden_dim = 128
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-episode_n = 10
+episode_n = 500
 agent = CEM(state_dim, action_n, hidden_dim).to(device)
-optim = torch.optim.SGD(agent.parameters(), lr=10)
+optim = torch.optim.SGD(agent.parameters(), lr=0.01)
 scheduler = None
+loss = nn.L1Loss()
 agent.optimizer = optim
 agent.scheduler = scheduler
+agent.loss = loss
 trajectory_n = 1000
-trajectory_len = 1000
-q_param = 0.3
+trajectory_len = 5000
+q_param = 0.8
 
 
 config = {
+    "description":"Delete noise",
     "trajectory_n":trajectory_n,
     "epochs":episode_n,
     "trajectory_len":trajectory_len,
@@ -117,13 +118,15 @@ config = {
     "optim":optim,
     "scheduler":scheduler,
     "hidden_dim":hidden_dim,
-    "n_hidden":1
+    "n_hidden":1,
+    "loss":loss
 }
-run = wandb.init(project="ods_rl-MountainCarContinuous", config=config, name="Run 13")
+run = wandb.init(project="ods_rl-MountainCarContinuous", config=config, name="Run 16")
 wandb.watch(agent, log_freq=100)
 
 rewards = []
-eps = 1
+eps = 0
+rate=0.99
 for episode in range(episode_n):
     trajectories = [get_trajectory(env, agent, trajectory_len, eps) for _ in range(trajectory_n)]
     
@@ -136,7 +139,7 @@ for episode in range(episode_n):
     
     if len(elite_trajectories) > 0:
         agent.update_policy(elite_trajectories)
-        eps = 1/(episode+1)
+        eps = eps*rate
     
 
 fig, ax = plt.subplots()
