@@ -18,6 +18,7 @@ def get_q_values(v_values, gamma):
                 q_values[state][action] += gamma * env.get_transition_prob(state, action, next_state) * v_values[next_state]
     return q_values
 
+#Init policy with plain distribution
 def init_policy():
 	policy = {}
 	for state in env.get_all_states():
@@ -43,6 +44,7 @@ def policy_evaluation_step(v_values, policy, gamma):
 
 def policy_evaluation(policy, gamma, eval_iter_n):
     v_values = init_v_values()
+    #Iterative value function's computation
     for _ in range(eval_iter_n):
         v_values = policy_evaluation_step(v_values, policy, gamma)
     q_values = get_q_values(v_values, gamma)
@@ -76,13 +78,16 @@ def value_iteration_step(v_values, gamma):
         new_v_values[state] = max_q
     return new_v_values
 
-def value_iteration(iter_n, gamma):
+def value_iteration(iter_n, gamma, log=False):
     policy = init_policy()
     v_values = init_v_values()
     for _ in range(iter_n):
         v_values = value_iteration_step(v_values, gamma)
         q_values = get_q_values(v_values, gamma)
         policy = policy_improvement(q_values)
+        if log:
+             mean_total_reward = policy_validation(policy, env_entering_n, action_n)
+             wandb.log({"mean_total_reward":mean_total_reward})
     return policy
 
 def policy_iteration(iter_n, eval_iter_n, gamma):
@@ -91,27 +96,9 @@ def policy_iteration(iter_n, eval_iter_n, gamma):
         q_values = policy_evaluation(policy, gamma, eval_iter_n)
         policy = policy_improvement(q_values)
     return policy
-     
 
-#-----Comparising policy iteration and value iteration-----
-iter_n = 20
-eval_iter_n = 20
-gamma = 0.99979
-env_entering_n = 1000
-action_n = 1000
-
-wandb.login()
-config = {
-    "task":"Comparising policy iteration and value iteration",
-    "description":"Try different gamma values with fixed number of iterations.",
-    "iter_n":iter_n,
-    "eval_iter_n":eval_iter_n,
-    "gamma":gamma,
-    "env_entering_n":1000,
-    "action_n":1000
-}
-run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Run 6")
-
+#-----Definitely tasks-----
+#Comment other tasks when running file on one task
 def policy_validation(policy, env_entering_n, action_n):
     total_rewards = []
     for _ in range(env_entering_n):
@@ -127,10 +114,86 @@ def policy_validation(policy, env_entering_n, action_n):
         total_rewards.append(total_reward)
     return np.mean(total_rewards)
 
-value_iteration_policy = value_iteration(iter_n, gamma)
+wandb.login()
+iter_n = 20
+env_entering_n = 1000
+action_n = 1000
+
+#Value Iteration parameters search
+#gamma
+gamma_range = [0.9, 0.9999, 0.001]
+config = {
+    "task":"Parameters search",
+    "description":"Searching optimal parameters for Valut Iteration",
+    "gamma_range":gamma_range,
+    "iter_n":iter_n,
+    "env_entering_n":1000,
+    "action_n":1000
+}
+run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Parameters search_Run 2")
+
+wandb.define_metric("gamma")
+wandb.define_metric("Mean total reward", step_metric="gamma")
+
+max_reward = 0
+max_gamma = 0
+for gamma in np.arange(*gamma_range):
+    policy = value_iteration(iter_n, gamma)
+    mean_total_reward = policy_validation(policy, env_entering_n, action_n)
+    if mean_total_reward > max_reward:
+         max_gamma = gamma
+         max_reward = mean_total_reward
+    log_dict = {
+        "gamma": gamma,
+        "Mean total reward": mean_total_reward,
+    }
+    wandb.log(log_dict)
+print("Max gamma: {0}".format(max_gamma))
+
+#iter_n
+iter_n = 20
+gamma = 0.9902
+config = {
+    "task":"Parameters search",
+    "description":"Searching optimal parameters for Valut Iteration",
+    "gamma":gamma,
+    "iter_n":iter_n,
+    "env_entering_n":1000,
+    "action_n":1000
+}
+run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Parameters search_Run 3")
+
+policy = value_iteration(iter_n, gamma, log=True)
+
+#-----Comparising policy iteration and value iteration-----
+pi_iter_n = 20
+pi_gamma = 0.99979
+pi_eval_iter_n = 20
+
+vi_iter_n = 25
+vi_gamma = 0.9902
+
+env_entering_n = 1000
+action_n = 1000
+
+
+config = {
+    "task":"Comparising policy iteration and value iteration",
+    "description":"Try different gamma values with fixed number of iterations.",
+    "iter_n":iter_n,
+    "eval_iter_n":pi_eval_iter_n,
+    "gamma":pi_gamma,
+    "env_entering_n":1000,
+    "action_n":1000
+}
+#run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Run 6")
+
+
+
+value_iteration_policy = value_iteration(vi_iter_n, vi_gamma)
 value_mean_reward = policy_validation(value_iteration_policy, env_entering_n, action_n)
 
-policy_iteration_policy = policy_iteration(iter_n, eval_iter_n, gamma)
+policy_iteration_policy = policy_iteration(pi_iter_n, pi_eval_iter_n, pi_gamma)
 policy_mean_reward = policy_validation(policy_iteration_policy, env_entering_n, action_n)
 
 print("Mean total reward for value iteration: {0}".format(value_mean_reward))

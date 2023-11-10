@@ -67,7 +67,7 @@ def policy_improvement(q_values):
 	return policy
 
 #-----Trying to use last step values-----
-iter_n = 20
+iter_n = 40
 eval_iter_n = 20
 gamma = 0.99979
 env_entering_n = 1000
@@ -83,7 +83,7 @@ config = {
     "env_entering_n":1000,
     "action_n":1000
 }
-run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Run 5")
+run = wandb.init(project="ods_rl-frozen_lake", config=config, name="Policy Iteration parameters search_Run 1")
 
 #This function is modified with using values from the last step
 def policy_training(iter_n, eval_iter_n, gamma, use_last_values):
