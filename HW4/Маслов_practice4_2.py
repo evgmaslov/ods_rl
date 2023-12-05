@@ -320,7 +320,7 @@ mc_agent = create_q_agent(d_env.n_states, d_env.n_actions)
 mc_config = {
     "action_n":d_env.n_actions,
     "state_n":d_env.n_states,
-    "episode_n":1000,
+    "episode_n":5000,
     "trajectory_len":1000,
     "gamma":0.99
 }
@@ -330,7 +330,7 @@ mc_rewards = MonteCarlo(d_env, mc_agent, mc_config)
 sarsa_agent = create_q_agent(d_env.n_states, d_env.n_actions)
 sarsa_config = {
     "episode_n":1000,
-    "trajectory_len":1000,
+    "trajectory_len":5000,
     "gamma":0.99,
     "alpha":0.1,
 }
@@ -339,7 +339,7 @@ sarsa_rewards = SARSA(d_env, sarsa_agent, sarsa_config)
 #Q-Learning
 ql_agent = create_q_agent(d_env.n_states, d_env.n_actions)
 ql_config = {
-    "episode_n":1000,
+    "episode_n":5000,
     "trajectory_len":1000,
     "gamma":0.99,
     "alpha":0.1,
